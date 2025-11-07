@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Paragliding Slope Finder</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+html, body { margin: 0; height: 100%; font-family: 'Montserrat', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+#map { width: 100%; height: 100%; }
+
+/* Unified modern panel style */
+.panel {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 14px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+  padding: 14px 20px;
+  font-weight: 500;
+  color: #222;
+}
+
+/* Title block - top right */
+#titleBlock {
+  position: absolute; top: 20px; right: 20px;
+  font-size: 20px; font-weight: 700; letter-spacing: 1px;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+  z-index: 1000;
+}
+
+/* Control panel - bottom left */
+.control-panel {
+  position: absolute; bottom: 20px; left: 20px;
+  min-width: 220px;
+  z-index: 1000;
+}
+
+/* Labels and inputs */
+.control-panel label {
+  display: flex; flex-direction: column; margin-bottom: 12px; font-size: 14px;
+}
+.control-panel select,
+.control-panel input[type="number"] {
+  margin-top: 6px; padding: 6px 10px;
+  border: 1px solid #ccc; border-radius: 8px; outline: none; background-color: #f9f9f9;
+  font-family: 'Montserrat','Segoe UI',sans-serif; font-weight:500; font-size:14px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.control-panel select {
+  appearance: none;
+  background-image: url('data:image/svg+xml;utf8,<svg fill="gray" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 16px 16px;
+}
+.control-panel select:focus,
+.control-panel input[type="number"]:focus {
+  border-color: #007bff; box-shadow: 0 0 5px rgba(0,123,255,0.5);
+}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
+
+/* ± buttons */
+.tolContainer { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.tolContainer button {
+  width: 30px; height: 30px;
+  border: none; border-radius: 10px; cursor: pointer;
+  font-size: 18px; font-weight: 700; background: #eee;
+  display: flex; justify-content: center; align-items: center;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.tolContainer button:hover { background: #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
+
+/* Leaflet zoom buttons modern style */
+.leaflet-control-zoom, .leaflet-bar {
+  border-radius: 14px !important;
+  background: rgba(255,255,255,0.95) !important;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.25) !important;
+  font-family: 'Montserrat','Segoe UI',sans-serif;
+  padding: 4px;
+}
+.leaflet-bar a {
+  width: 32px; height: 32px;
+  line-height: 32px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  border-radius: 10px !important;
+  background: #eee;
+  margin: 4px 0;
+  display: flex; justify-content: center; align-items: center;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.leaflet-bar a:hover { background: #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="titleBlock" class="panel">Paragliding Slope Finder</div>
+
+<div class="control-panel panel">
+  <label>Wind:
+    <select id="windDir"></select>
+  </label>
+  <label>Tolerance:
+    <div class="tolContainer">
+      <button id="tolDec">−</button>
+      <input id="tol" type="number" value="30" readonly />
+      <button id="tolInc">+</button>
+    </div>
+  </label>
+  <label>Min slope:
+    <div class="tolContainer">
+      <button id="slopeDec">−</button>
+      <input id="minSlope" type="number" value="5" readonly />
+      <button id="slopeInc">+</button>
+    </div>
+  </label>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// Map
+const map = L.map("map", { center: [56.5, -4.0], zoom: 7 });
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 15 }).addTo(map);
+L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxZoom: 15, opacity: 0.7 }).addTo(map);
+
+// Wind directions
+const directionToDeg = { N:0,NNE:22.5,NE:45,ENE:67.5,E:90,ESE:112.5,SE:135,SSE:157.5,S:180,SSW:202.5,SW:225,WSW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5 };
+const windSelect = document.getElementById("windDir");
+for (let k in directionToDeg) { const opt = document.createElement("option"); opt.value=k; opt.textContent=k; windSelect.appendChild(opt); }
+windSelect.value = "SW";
+
+const terrariumUrl = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+
+// Aspect layer
+const AspectLayer = L.GridLayer.extend({
+  createTile(coords, done){
+    const tile=L.DomUtil.create("canvas","leaflet-tile"); const size=this.getTileSize(); tile.width=size.x; tile.height=size.y;
+    const ctx=tile.getContext("2d"); const img=new Image(); img.crossOrigin="anonymous";
+    img.src=terrariumUrl.replace("{z}",coords.z).replace("{x}",coords.x).replace("{y}",coords.y);
+
+    img.onload=()=>{
+      const off=document.createElement("canvas"); off.width=img.width; off.height=img.height;
+      const offCtx=off.getContext("2d"); offCtx.drawImage(img,0,0); const data=offCtx.getImageData(0,0,off.width,off.height).data;
+      const step=1, sx=off.width/size.x, sy=off.height/size.y;
+      const windTo=(this.windDeg+180)%360; const tol=this.tolerance??30; const minS=this.minSlope??5;
+      const n=Math.pow(2,coords.z); const lat=Math.atan(Math.sinh(Math.PI*(1-2*coords.y/n)))*180/Math.PI;
+      const mppx=40075016.686*Math.cos(lat*Math.PI/180)/(256*n); const mppy=40075016.686/(256*n);
+
+      function elev(px,py){px=Math.max(0,Math.min(off.width-1,px|0)); py=Math.max(0,Math.min(off.height-1,py|0)); const i=(py*off.width+px)*4; return (data[i]*256+data[i+1]+data[i+2]/256)-32768;}
+
+      ctx.fillStyle="rgba(255,120,0,0.9)";
+      for(let y=0;y<size.y;y+=step){for(let x=0;x<size.x;x+=step){
+        const fx=x*sx, fy=y*sy;
+        const zx1=elev(fx-1,fy), zx2=elev(fx+1,fy), zy1=elev(fx,fy-1), zy2=elev(fx,fy+1);
+        const dzdx=(zx2-zx1)/(2*mppx), dzdy=(zy1-zy2)/(2*mppy);
+        const slope=Math.atan(Math.sqrt(dzdx*dzdx+dzdy*dzdy))*180/Math.PI;
+        let aspect=Math.atan2(dzdx,dzdy)*180/Math.PI; if(aspect<0) aspect+=360;
+        const diff=Math.min(Math.abs(aspect-windTo),360-Math.abs(aspect-windTo));
+        if(diff<=tol && slope>=minS) ctx.fillRect(x,y,step,step);
+      }}
+      done(null,tile);
+    };
+    img.onerror=()=>done(null,tile); return tile;
+  },
+  setParams({windDeg,tolerance,minSlope}){this.windDeg=windDeg; this.tolerance=tolerance; this.minSlope=minSlope; this.redraw();}
+});
+
+const aspectLayer=new AspectLayer({tileSize:256}).addTo(map);
+
+// Controls
+const tolInput=document.getElementById("tol");
+const minSlopeInput=document.getElementById("minSlope");
+const tolInc=document.getElementById("tolInc"), tolDec=document.getElementById("tolDec");
+const slopeInc=document.getElementById("slopeInc"), slopeDec=document.getElementById("slopeDec");
+const windSelectEl = document.getElementById("windDir");
+
+function updateLayer(){
+  const windDeg=directionToDeg[windSelectEl.value];
+  const tol=Number(tolInput.value);
+  const minS=Number(minSlopeInput.value);
+  aspectLayer.setParams({windDeg,tolerance:tol,minSlope:minS});
+}
+
+// Tolerance ±5
+tolInc.onclick=()=>{ tolInput.value=Math.min(90,Number(tolInput.value)+5); updateLayer(); };
+tolDec.onclick=()=>{ tolInput.value=Math.max(0,Number(tolInput.value)-5); updateLayer(); };
+
+// Min slope ±1
+slopeInc.onclick=()=>{ minSlopeInput.value=Math.min(90,Number(minSlopeInput.value)+1); updateLayer(); };
+slopeDec.onclick=()=>{ minSlopeInput.value=Math.max(0,Number(minSlopeInput.value)-1); updateLayer(); };
+
+windSelectEl.onchange=updateLayer;
+updateLayer();
+</script>
+</body>
+</html>
