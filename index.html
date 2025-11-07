@@ -103,14 +103,14 @@ input[type=number] { -moz-appearance: textfield; }
   <label>Tolerance:
     <div class="tolContainer">
       <button id="tolDec">−</button>
-      <input id="tol" type="number" value="30" readonly />
+      <input id="tol" type="number" value="30" readonly />°
       <button id="tolInc">+</button>
     </div>
   </label>
   <label>Min slope:
     <div class="tolContainer">
       <button id="slopeDec">−</button>
-      <input id="minSlope" type="number" value="5" readonly />
+      <input id="minSlope" type="number" value="5" readonly />°
       <button id="slopeInc">+</button>
     </div>
   </label>
@@ -126,7 +126,12 @@ L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxZoom: 15, o
 // Wind directions
 const directionToDeg = { N:0,NNE:22.5,NE:45,ENE:67.5,E:90,ESE:112.5,SE:135,SSE:157.5,S:180,SSW:202.5,SW:225,WSW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5 };
 const windSelect = document.getElementById("windDir");
-for (let k in directionToDeg) { const opt = document.createElement("option"); opt.value=k; opt.textContent=k; windSelect.appendChild(opt); }
+for (let k in directionToDeg) { 
+  const opt = document.createElement("option"); 
+  opt.value = k; 
+  opt.textContent = k; 
+  windSelect.appendChild(opt); 
+}
 windSelect.value = "SW";
 
 const terrariumUrl = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
@@ -134,62 +139,75 @@ const terrariumUrl = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z
 // Aspect layer
 const AspectLayer = L.GridLayer.extend({
   createTile(coords, done){
-    const tile=L.DomUtil.create("canvas","leaflet-tile"); const size=this.getTileSize(); tile.width=size.x; tile.height=size.y;
-    const ctx=tile.getContext("2d"); const img=new Image(); img.crossOrigin="anonymous";
-    img.src=terrariumUrl.replace("{z}",coords.z).replace("{x}",coords.x).replace("{y}",coords.y);
+    const tile = L.DomUtil.create("canvas","leaflet-tile"); 
+    const size = this.getTileSize(); tile.width = size.x; tile.height = size.y;
+    const ctx = tile.getContext("2d"); 
+    const img = new Image(); img.crossOrigin="anonymous";
+    img.src = terrariumUrl.replace("{z}",coords.z).replace("{x}",coords.x).replace("{y}",coords.y);
 
-    img.onload=()=>{
-      const off=document.createElement("canvas"); off.width=img.width; off.height=img.height;
-      const offCtx=off.getContext("2d"); offCtx.drawImage(img,0,0); const data=offCtx.getImageData(0,0,off.width,off.height).data;
-      const step=1, sx=off.width/size.x, sy=off.height/size.y;
-      const windTo=(this.windDeg+180)%360; const tol=this.tolerance??30; const minS=this.minSlope??5;
-      const n=Math.pow(2,coords.z); const lat=Math.atan(Math.sinh(Math.PI*(1-2*coords.y/n)))*180/Math.PI;
-      const mppx=40075016.686*Math.cos(lat*Math.PI/180)/(256*n); const mppy=40075016.686/(256*n);
+    img.onload = ()=>{
+      const off = document.createElement("canvas"); off.width = img.width; off.height = img.height;
+      const offCtx = off.getContext("2d"); offCtx.drawImage(img,0,0); 
+      const data = offCtx.getImageData(0,0,off.width,off.height).data;
+      const step = 1, sx = off.width/size.x, sy = off.height/size.y;
+      const windTo = (this.windDeg+180)%360; const tol = this.tolerance??30; const minS = this.minSlope??5;
+      const n = Math.pow(2,coords.z); 
+      const lat = Math.atan(Math.sinh(Math.PI*(1-2*coords.y/n)))*180/Math.PI;
+      const mppx = 40075016.686*Math.cos(lat*Math.PI/180)/(256*n); 
+      const mppy = 40075016.686/(256*n);
 
-      function elev(px,py){px=Math.max(0,Math.min(off.width-1,px|0)); py=Math.max(0,Math.min(off.height-1,py|0)); const i=(py*off.width+px)*4; return (data[i]*256+data[i+1]+data[i+2]/256)-32768;}
+      function elev(px,py){
+        px = Math.max(0,Math.min(off.width-1,px|0)); 
+        py = Math.max(0,Math.min(off.height-1,py|0)); 
+        const i = (py*off.width+px)*4; 
+        return (data[i]*256+data[i+1]+data[i+2]/256)-32768;
+      }
 
-      ctx.fillStyle="rgba(255,120,0,0.9)";
-      for(let y=0;y<size.y;y+=step){for(let x=0;x<size.x;x+=step){
-        const fx=x*sx, fy=y*sy;
-        const zx1=elev(fx-1,fy), zx2=elev(fx+1,fy), zy1=elev(fx,fy-1), zy2=elev(fx,fy+1);
-        const dzdx=(zx2-zx1)/(2*mppx), dzdy=(zy1-zy2)/(2*mppy);
-        const slope=Math.atan(Math.sqrt(dzdx*dzdx+dzdy*dzdy))*180/Math.PI;
-        let aspect=Math.atan2(dzdx,dzdy)*180/Math.PI; if(aspect<0) aspect+=360;
-        const diff=Math.min(Math.abs(aspect-windTo),360-Math.abs(aspect-windTo));
-        if(diff<=tol && slope>=minS) ctx.fillRect(x,y,step,step);
-      }}
+      ctx.fillStyle = "rgba(255,120,0,0.9)";
+      for(let y=0;y<size.y;y+=step){
+        for(let x=0;x<size.x;x+=step){
+          const fx = x*sx, fy = y*sy;
+          const zx1 = elev(fx-1,fy), zx2 = elev(fx+1,fy), zy1 = elev(fx,fy-1), zy2 = elev(fx,fy+1);
+          const dzdx = (zx2-zx1)/(2*mppx), dzdy = (zy1-zy2)/(2*mppy);
+          const slope = Math.atan(Math.sqrt(dzdx*dzdx+dzdy*dzdy))*180/Math.PI;
+          let aspect = Math.atan2(dzdx,dzdy)*180/Math.PI; if(aspect<0) aspect+=360;
+          const diff = Math.min(Math.abs(aspect-windTo),360-Math.abs(aspect-windTo));
+          if(diff<=tol && slope>=minS) ctx.fillRect(x,y,step,step);
+        }
+      }
       done(null,tile);
     };
-    img.onerror=()=>done(null,tile); return tile;
+    img.onerror = ()=>done(null,tile); 
+    return tile;
   },
   setParams({windDeg,tolerance,minSlope}){this.windDeg=windDeg; this.tolerance=tolerance; this.minSlope=minSlope; this.redraw();}
 });
 
-const aspectLayer=new AspectLayer({tileSize:256}).addTo(map);
+const aspectLayer = new AspectLayer({tileSize:256}).addTo(map);
 
 // Controls
-const tolInput=document.getElementById("tol");
-const minSlopeInput=document.getElementById("minSlope");
-const tolInc=document.getElementById("tolInc"), tolDec=document.getElementById("tolDec");
-const slopeInc=document.getElementById("slopeInc"), slopeDec=document.getElementById("slopeDec");
+const tolInput = document.getElementById("tol");
+const minSlopeInput = document.getElementById("minSlope");
+const tolInc = document.getElementById("tolInc"), tolDec = document.getElementById("tolDec");
+const slopeInc = document.getElementById("slopeInc"), slopeDec = document.getElementById("slopeDec");
 const windSelectEl = document.getElementById("windDir");
 
 function updateLayer(){
-  const windDeg=directionToDeg[windSelectEl.value];
-  const tol=Number(tolInput.value);
-  const minS=Number(minSlopeInput.value);
+  const windDeg = directionToDeg[windSelectEl.value];
+  const tol = Number(tolInput.value);
+  const minS = Number(minSlopeInput.value);
   aspectLayer.setParams({windDeg,tolerance:tol,minSlope:minS});
 }
 
 // Tolerance ±5
-tolInc.onclick=()=>{ tolInput.value=Math.min(90,Number(tolInput.value)+5); updateLayer(); };
-tolDec.onclick=()=>{ tolInput.value=Math.max(0,Number(tolInput.value)-5); updateLayer(); };
+tolInc.onclick = ()=>{ tolInput.value = Math.min(90, Number(tolInput.value)+5); updateLayer(); };
+tolDec.onclick = ()=>{ tolInput.value = Math.max(0, Number(tolInput.value)-5); updateLayer(); };
 
-// Min slope ±1
-slopeInc.onclick=()=>{ minSlopeInput.value=Math.min(90,Number(minSlopeInput.value)+1); updateLayer(); };
-slopeDec.onclick=()=>{ minSlopeInput.value=Math.max(0,Number(minSlopeInput.value)-1); updateLayer(); };
+// Min slope ±5 (in degrees)
+slopeInc.onclick = ()=>{ minSlopeInput.value = Math.min(90, Number(minSlopeInput.value)+5); updateLayer(); };
+slopeDec.onclick = ()=>{ minSlopeInput.value = Math.max(0, Number(minSlopeInput.value)-5); updateLayer(); };
 
-windSelectEl.onchange=updateLayer;
+windSelectEl.onchange = updateLayer;
 updateLayer();
 </script>
 </body>
